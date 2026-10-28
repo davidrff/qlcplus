@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 120
     env:
       QT_VERSION: '6.10.2'
+      OUTFILE: 'QLC+_4.14.4.exe'
+      NSIS_SCRIPT: 'qlcplus4Qt6.nsi'
 
     steps:
       - name: Checkout QLC+ 4.14.4 Phase Match branch
@@ -32,8 +34,6 @@ jobs:
         shell: bash
         run: |
           echo "QTDIR=/d/a/qlcplus/qlcplus/qt/Qt/${QT_VERSION}/mingw_64" >> $GITHUB_ENV
-          echo "OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt6.nsi | cut -d'\"' -f 2)" >> $GITHUB_ENV
-          echo "NSIS_SCRIPT=qlcplus4Qt6.nsi" >> $GITHUB_ENV
           echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
       - name: Install Qt
@@ -89,7 +89,7 @@ jobs:
 
       - name: Configure
         shell: msys2 {0}
-        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake"
+        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" -DCMAKE_CXX_FLAGS="-Wno-error=sfinae-incomplete"
 
       - name: Build
         shell: msys2 {0}
