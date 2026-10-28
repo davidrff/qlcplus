@@ -61,6 +61,15 @@ find_package(PkgConfig REQUIRED)
 include(./variables.cmake)
 include(./coverage.cmake)
 
+# QLC+ 4.14.4 predates GCC 16's newer diagnostics. On MinGW, keep all
+# warnings enabled but do not promote them to fatal errors. Subdirectories
+# include variables.cmake again and can append -Werror to CMAKE_CXX_FLAGS;
+# this directory compile option is emitted afterwards and therefore restores
+# normal warning semantics for the Windows compatibility CI/build.
+if(MINGW)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error>)
+endif()
+
 if((((QT_VERSION_MAJOR LESS 5)) AND (APPLE)))
     pkg_check_modules(PORTAUDIO_2 IMPORTED_TARGET portaudio-2.0)
 endif()

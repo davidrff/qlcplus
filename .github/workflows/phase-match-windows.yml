@@ -1,0 +1,130 @@
+name: Build QLC+ 4.14.4 Phase Match Windows
+
+on:
+  push:
+    branches: [phase-match-4.14.4]
+    paths:
+      - 'tools/phase_match/**'
+      - '.github/workflows/phase-match-windows.yml'
+  pull_request:
+    branches: [phase-match-base-4.14.4]
+  workflow_dispatch:
+
+jobs:
+  build-windows-phase-match:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      QT_VERSION: '6.10.2'
+      OUTFILE: 'QLC+_4.14.4.exe'
+      NSIS_SCRIPT: 'qlcplus4Qt6.nsi'
+
+    steps:
+      - name: Checkout QLC+ 4.14.4 Phase Match branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase-match-4.14.4
+          submodules: false
+
+      - name: Apply Phase Match patch
+        shell: pwsh
+        run: python tools/phase_match/apply_phase_match.py .
+
+      - name: Set build variables
+        shell: bash
+        run: |
+          echo "QTDIR=/d/a/qlcplus/qlcplus/qt/Qt/${QT_VERSION}/mingw_64" >> $GITHUB_ENV
+          echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          dir: '${{ github.workspace }}/qt/'
+          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          cache: true
+
+      - name: Setup MSYS2 MinGW64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          release: true
+          update: false
+          path-type: inherit
+          install: >-
+            wget
+            unzip
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-libs
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-libmad
+            mingw-w64-x86_64-libsndfile
+            mingw-w64-x86_64-flac
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-python-lxml
+            mingw-w64-x86_64-nsis
+
+      - name: Install D2XX SDK
+        shell: msys2 {0}
+        run: |
+          mkdir -p /c/projects/D2XXSDK
+          wget https://qlcplus.org/misc/CDM-v2.12.36.20-WHQL-Certified.zip -O /c/projects/D2XXSDK/cdm.zip
+          cd /c/projects/D2XXSDK
+          unzip -o cdm.zip
+          cd amd64
+          gendef.exe - ftd2xx64.dll > ftd2xx.def
+          dlltool -k --input-def ftd2xx.def --dllname ftd2xx64.dll --output-lib libftd2xx.a
+
+      - name: Apply official Windows CI adjustments
+        shell: msys2 {0}
+        run: |
+          sed -i -e 's/Debug/Release/g' CMakeLists.txt
+          sed -i -e 's/    add_subdirectory(velleman)/#    add_subdirectory(velleman)/g' plugins/CMakeLists.txt
+          sed -i -e 's/$ENV{SystemDrive}\/msys64/D:\/a\/_temp\/msys64/g' platforms/windows/CMakeLists.txt
+          sed -i -e 's/c\:\\projects/d:\\a\\qlcplus/g' platforms/windows/${NSIS_SCRIPT}
+          # QLC+ 4.14.4 was written for older GCC warning sets. GCC 16 adds
+          # new diagnostics that are harmless here but -Werror makes fatal.
+          # Keep all warnings visible, but do not promote them to errors in
+          # this compatibility build.
+          find . -type f \( -name 'CMakeLists.txt' -o -name '*.cmake' \) -print0 | xargs -0 sed -i 's/-Werror//g'
+
+      - name: Configure
+        shell: msys2 {0}
+        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake"
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          sed -i "s/\(#define APPVERSION \".*\)\"/\1 PhaseMatch-PM1-${GIT_REV}\"/" engine/src/qlcconfig.h
+          cmake --build build --parallel 4
+
+      - name: Install
+        shell: msys2 {0}
+        run: cmake --build build --target install
+
+      - name: Deploy Qt runtime
+        shell: msys2 {0}
+        run: |
+          ./translate.sh release ui
+          cp *.qm /c/qlcplus
+          cd /c/qlcplus
+          "${QTDIR}/bin/windeployqt" qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
+
+      - name: Build NSIS installer
+        shell: msys2 {0}
+        run: |
+          cd /c/qlcplus
+          makensis -X'SetCompressor /FINAL lzma' "${NSIS_SCRIPT}"
+          mkdir -p /d/a/phase-artifact
+          cp "${OUTFILE}" /d/a/phase-artifact/QLC+_4.14.4_PhaseMatch_PM1_Windows_x64.exe
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: QLC+_4.14.4_PhaseMatch_PM1_Windows_x64
+          path: D:/a/phase-artifact/QLC+_4.14.4_PhaseMatch_PM1_Windows_x64.exe
+          if-no-files-found: error
