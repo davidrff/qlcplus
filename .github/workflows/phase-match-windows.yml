@@ -86,10 +86,15 @@ jobs:
           sed -i -e 's/    add_subdirectory(velleman)/#    add_subdirectory(velleman)/g' plugins/CMakeLists.txt
           sed -i -e 's/$ENV{SystemDrive}\/msys64/D:\/a\/_temp\/msys64/g' platforms/windows/CMakeLists.txt
           sed -i -e 's/c\:\\projects/d:\\a\\qlcplus/g' platforms/windows/${NSIS_SCRIPT}
+          # QLC+ 4.14.4 was written for older GCC warning sets. GCC 16 adds
+          # new diagnostics that are harmless here but -Werror makes fatal.
+          # Keep all warnings visible, but do not promote them to errors in
+          # this compatibility build.
+          find . -type f \( -name 'CMakeLists.txt' -o -name '*.cmake' \) -print0 | xargs -0 sed -i 's/-Werror//g'
 
       - name: Configure
         shell: msys2 {0}
-        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" -DCMAKE_CXX_FLAGS="-Wno-error=sfinae-incomplete"
+        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake"
 
       - name: Build
         shell: msys2 {0}
