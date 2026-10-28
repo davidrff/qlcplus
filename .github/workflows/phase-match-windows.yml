@@ -6,6 +6,8 @@ on:
     paths:
       - 'tools/phase_match/**'
       - '.github/workflows/phase-match-windows.yml'
+  pull_request:
+    branches: [phase-match-base-4.14.4]
   workflow_dispatch:
 
 jobs:
