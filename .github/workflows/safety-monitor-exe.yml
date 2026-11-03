@@ -1,0 +1,26 @@
+name: SafetyMonitor Windows EXE
+on:
+  push:
+    branches: [ safety-monitor-build ]
+    paths:
+      - 'safety-monitor-build/**'
+      - '.github/workflows/safety-monitor-exe.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish single EXE
+        shell: pwsh
+        run: dotnet publish .\safety-monitor-build\SafetyMonitor.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o .\out
+      - name: Verify EXE
+        shell: pwsh
+        run: if (!(Test-Path .\out\SafetyMonitor.exe)) { throw 'SafetyMonitor.exe not generated' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SafetyMonitor-win-x64
+          path: .\out\SafetyMonitor.exe
